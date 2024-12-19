@@ -70,7 +70,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(net.parameters(), lr=0.01)
 device = "cpu"
 
-NUM_EPOCHS = 20
+NUM_EPOCHS = 50
 for epoch in range(NUM_EPOCHS):
     net.train()
     print("epoch:", epoch)
