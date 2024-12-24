@@ -1,3 +1,4 @@
+import math
 import random
 
 import numpy as np
@@ -66,18 +67,18 @@ def train(loader: DataLoader) -> nn.Module:
             loss = criterion(net(t), p)
             loss.backward()
             optimizer.step()
-        if epoch % 500 == 0:
-            with torch.no_grad():
-                loss = criterion(net(t_seq), p_seq)
-                print(f"Epoch {epoch}, loss = {loss}")
+        # if epoch % 50 == 0:
+        #     with torch.no_grad():
+        #         loss = criterion(net(t_seq), p_seq)
+        #         print(f"Epoch {epoch}, loss = {loss}")
 
     print("Time Elapsed: ", time.time() - t1)
     return net
 
 
-if __name__ == '__main__':
+def calculate(data_path: str):
     # Process the data
-    t_s, t_e, t_seq, x_seq, y_seq = load_data('projectile_train.csv')
+    t_s, t_e, t_seq, x_seq, y_seq = load_data(data_path)
     p_seq = torch.tensor(torch.zeros([len(t_seq), 2]), dtype=torch.float64)
     for i in range(len(t_seq)):
         p_seq[i] = torch.tensor([x_seq[i], y_seq[i]], dtype=torch.float64)
@@ -89,7 +90,7 @@ if __name__ == '__main__':
     net = train(loader)
 
     # Evaluate the model
-    eva_t = np.linspace(t_s, 1.6, 100000)
+    eva_t = np.linspace(t_s, t_e, 100000)
     xs = []
     ys = []
 
@@ -106,28 +107,72 @@ if __name__ == '__main__':
     plt.plot(xs, ys, color="blue")
     plt.show()
 
-    time_tensor = torch.tensor([0.2], dtype=torch.float64, requires_grad=True)
-    op = net(time_tensor)
-    print(op)
+    sx = 0
+    sy = 0
+    sm = 0
+    cnt = 0
+    samples = np.linspace(t_s, t_e, 5000)
+    for i in range(5000):
+        time_tensor = torch.tensor([samples[i]], dtype=torch.float64, requires_grad=True)
+        op = net(time_tensor)
+        # print(op)
 
+        dy_dt = torch.autograd.grad(op[1], time_tensor, grad_outputs=torch.ones_like(op[1]),
+                                    create_graph=True)[0]
+        d2y_dt2 = torch.autograd.grad(dy_dt, time_tensor, grad_outputs=torch.ones_like(dy_dt),
+                                      create_graph=True)[0]
+        dx_dt = torch.autograd.grad(op[0], time_tensor, grad_outputs=torch.ones_like(op[1]),
+                                    create_graph=True)[0]
+        d2x_dt2 = torch.autograd.grad(dx_dt, time_tensor, grad_outputs=torch.ones_like(dy_dt),
+                                      create_graph=True)[0]
 
-    # def derive(func, x):
-    #     print("derive at:", x)
-    #     delta = 1e-2
-    #     pp = func(x + delta)
-    #     pn = func(x - delta)
-    #     print(pp, pn)
-    #     return (pp - pn) / (2 * delta)
-    #
-    #
-    # print(derive(lambda x: net(x)[1].item(), time_tensor))
-    # print(derive(lambda y: derive(lambda x: net(x)[1].item(), y), time_tensor))
+        # if abs(dy_dt.item()) > 10 or abs(dx_dt.item()) > 10 or abs(d2y_dt2.item()) > 10 or abs(d2x_dt2.item()) > 10:
+        #     continue
+        # print("dx", dx_dt)
+        # print("dy", dy_dt)
+        # print(d2x_dt2, d2y_dt2)
+        v_gs = math.sqrt(dx_dt ** 2 + dy_dt ** 2)
+        kx = d2x_dt2 / (dx_dt * v_gs)
+        ky = (d2y_dt2 + 9.8) / (dy_dt * v_gs)
+        # print(kx, ky)
+        sx += kx.item()
+        sy += ky.item()
+        sm += (kx.item() + ky.item()) / 2
+        # print((kx + ky) / 2)
+        cnt += 1
 
+    k = sx / cnt * -1
+    print(f"{k=}")
 
-    dy_dt = torch.autograd.grad(op[1], time_tensor, grad_outputs=torch.ones_like(op[1]),
+    eva_samples = np.linspace(t_s, t_e, 100000)
+    max_height = -1
+    max_point = None
+    max_v = None
+    for sample in eva_samples:
+        sample_tensor = torch.tensor([sample], dtype=torch.float64, requires_grad=True)
+        pred = net(sample_tensor)
+        if pred[1].item() > max_height:
+            max_point = (pred[0].item(), pred[1].item())
+            dx_dt = torch.autograd.grad(pred[0], sample_tensor, grad_outputs=torch.ones_like(pred[1]),
+                                        create_graph=True)[0]
+            dy_dt = torch.autograd.grad(pred[1], sample_tensor, grad_outputs=torch.ones_like(pred[1]),
+                                        create_graph=True)[0]
+            max_v = (dx_dt, dy_dt)
+            max_height = pred[1].item()
+
+    print(max_point)
+    print(max_v)
+
+    end_tensor = torch.tensor([t_e], dtype=torch.float64, requires_grad=True)
+    pred = net(end_tensor)
+    dx_dt = torch.autograd.grad(pred[0], end_tensor, grad_outputs=torch.ones_like(pred[1]),
                                 create_graph=True)[0]
-    d2y_dt2 = torch.autograd.grad(dy_dt, time_tensor, grad_outputs=torch.ones_like(dy_dt),
-                                  create_graph=True)[0]
-    print(dy_dt)
-    print(d2y_dt2)
+    dy_dt = torch.autograd.grad(pred[1], end_tensor, grad_outputs=torch.ones_like(pred[1]),
+                                create_graph=True)[0]
+    slope = dy_dt / dx_dt
+    offset = pred[1].item() - slope * pred[0].item()
+    print(dx_dt, dy_dt)
+    print(f"y = {slope.item()}x + {offset.item()}")
+    s = -1 * offset / slope
 
+    return k, max_height, s.item()
