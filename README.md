@@ -7,7 +7,7 @@ My repo for AI4S Teen Cup Challenge.
 - `baseline.ipynb` The baseline file provided to contestants.
 - `solution.py` My solution, in python.
 - `submission.ipynb` My submission file, in jupiter notebook, since they only accept `.ipynb`, which sucks.
-- `trail.py` Actually the `solution.py` for the physics problem
+- `trail.py` Actually the `solution.py` for the physics problem.
 - `csv_gen.py` The data generator for testing the codes for the math problem.
 - Other files are probably provided by the host of the contest.
 
